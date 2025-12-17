@@ -169,4 +169,4 @@ MIT License - see LICENSE file for details
 
 - 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/website-company-analyzer/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/website-company-analyzer/discussions)
-- 📧 **Email**: your.email@example.com
+- 📧 **Email**: aaredell@amazon.com
