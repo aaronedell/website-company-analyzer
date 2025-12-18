@@ -1,10 +1,15 @@
 # Website Company Analyzer
 
-A CLI tool that analyzes company websites and generates comprehensive executive summaries using AWS Bedrock's Nova Pro model.
+A CLI tool that comprehensively analyzes company websites and generates detailed executive summaries using AWS Bedrock's Nova Pro model.
+
+📋 **[View Architecture Diagram](ARCHITECTURE.md)**
 
 ## Features
 
-- 🔍 **Smart Web Scraping**: Automatically discovers and analyzes key pages (About, Products, Services, Blog, etc.)
+- 🔍 **Comprehensive Web Crawling**: Automatically discovers and analyzes entire website structure
+- 🗺️ **Sitemap Analysis**: Parses XML sitemaps to find all available pages
+- 📋 **Metadata Discovery**: Reads robots.txt, humans.txt, llms.txt, and other metadata files
+- 🎯 **Smart URL Categorization**: Intelligently categorizes pages (about, products, blog, etc.)
 - 🤖 **AI-Powered Analysis**: Uses AWS Bedrock Nova Pro for intelligent content analysis
 - 📊 **Dual Summaries**: Generates both executive and detailed summaries
 - 💾 **JSON Export**: Saves structured analysis data for further processing
@@ -86,7 +91,15 @@ python analyzer.py https://aws.amazon.com --json-only
 
 ## Output Format
 
-The tool generates two types of summaries:
+The tool generates comprehensive analysis with enhanced metadata:
+
+### Console Output
+```
+🌐 Website: https://example.com
+📊 URLs Discovered: 45
+📄 Priority Pages Analyzed: 12
+📋 Metadata Files: robots.txt, sitemap.xml, humans.txt
+```
 
 ### Executive Summary
 - Core business description
@@ -102,6 +115,22 @@ The tool generates two types of summaries:
 - Technology stack
 - Company culture insights
 - Recent developments
+- Content themes from blog/resources
+
+### JSON Metadata
+```json
+{
+  "url": "https://example.com",
+  "total_urls_discovered": 45,
+  "priority_urls_analyzed": [...],
+  "metadata_files_found": ["robots.txt", "sitemap.xml"],
+  "url_categories": {
+    "blog": 15,
+    "products": 8,
+    "about": 3
+  }
+}
+```
 
 ## Configuration
 
@@ -169,4 +198,4 @@ MIT License - see LICENSE file for details
 
 - 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/website-company-analyzer/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/website-company-analyzer/discussions)
-- 📧 **Email**: aaredell@amazon.com
+- 📧 **Email**: your.email@example.com
