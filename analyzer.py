@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Website Company Analyzer CLI
-A tool that comprehensively analyzes company websites and generates executive summaries using AWS Bedrock.
+A tool that comprehensively analyzes company websites and generates executive summaries using AI.
+Supports AWS Bedrock (Nova Pro) and local LLMs via Ollama.
 """
 
 import os
@@ -20,17 +21,97 @@ from collections import defaultdict
 # Load environment variables
 load_dotenv()
 
-def create_bedrock_client():
-    """Create AWS Bedrock client"""
-    try:
-        return boto3.client(
-            service_name="bedrock-runtime",
-            region_name=os.getenv("AWS_REGION", "us-east-1")
-        )
-    except Exception as e:
-        print(f"Error creating Bedrock client: {e}")
-        print("Please ensure your AWS credentials are configured correctly.")
-        sys.exit(1)
+# AI Provider Classes
+class AIProvider:
+    """Base class for AI providers"""
+    def generate(self, prompt):
+        raise NotImplementedError
+
+class BedrockProvider(AIProvider):
+    """AWS Bedrock Nova Pro provider"""
+    def __init__(self):
+        try:
+            self.client = boto3.client(
+                service_name="bedrock-runtime",
+                region_name=os.getenv("AWS_REGION", "us-east-1")
+            )
+        except Exception as e:
+            print(f"Error creating Bedrock client: {e}")
+            print("Please ensure your AWS credentials are configured correctly.")
+            sys.exit(1)
+
+    def generate(self, prompt):
+        """Generate response using AWS Bedrock Nova Pro"""
+        try:
+            body = json.dumps({
+                "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                "inferenceConfig": {
+                    "maxTokens": 3000,
+                    "temperature": 0.1
+                }
+            })
+
+            response = self.client.invoke_model(
+                body=body,
+                modelId="amazon.nova-pro-v1:0",
+                accept="application/json",
+                contentType="application/json"
+            )
+
+            response_body = json.loads(response.get('body').read())
+            return response_body['output']['message']['content'][0]['text']
+        except Exception as e:
+            print(f"Bedrock error: {str(e)}")
+            return None
+
+class OllamaProvider(AIProvider):
+    """Ollama local LLM provider"""
+    def __init__(self, model="llama3.2:3b", base_url="http://localhost:11434"):
+        self.model = model
+        self.base_url = base_url
+        self.api_url = f"{base_url}/api/generate"
+
+        # Test connection
+        try:
+            response = requests.get(f"{base_url}/api/tags", timeout=5)
+            if response.status_code != 200:
+                print(f"Warning: Could not connect to Ollama at {base_url}")
+                print("Make sure Ollama is running: brew services start ollama")
+        except Exception as e:
+            print(f"Error connecting to Ollama: {e}")
+            print("Make sure Ollama is running: brew services start ollama")
+            sys.exit(1)
+
+    def generate(self, prompt):
+        """Generate response using Ollama"""
+        try:
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.1
+                }
+            }
+
+            response = requests.post(self.api_url, json=payload, timeout=120)
+            if response.status_code == 200:
+                result = response.json()
+                return result['response']
+            else:
+                print(f"Ollama error: {response.status_code}")
+                print(response.text)
+                return None
+        except Exception as e:
+            print(f"Ollama error: {str(e)}")
+            return None
+
+def create_ai_provider(provider_type="bedrock", ollama_model="llama3.2:3b"):
+    """Factory function to create AI provider"""
+    if provider_type == "ollama":
+        return OllamaProvider(model=ollama_model)
+    else:
+        return BedrockProvider()
 
 def get_page_content(url, max_chars=8000):
     """Get and parse page content with better error handling"""
@@ -216,31 +297,7 @@ def select_priority_urls(categorized_urls, max_urls=15):
     
     return priority_urls[:max_urls]
 
-def call_bedrock(bedrock_client, prompt):
-    """Call AWS Bedrock Nova Pro model"""
-    try:
-        body = json.dumps({
-            "messages": [{"role": "user", "content": [{"text": prompt}]}],
-            "inferenceConfig": {
-                "maxTokens": 3000,
-                "temperature": 0.1
-            }
-        })
-        
-        response = bedrock_client.invoke_model(
-            body=body,
-            modelId="amazon.nova-pro-v1:0",
-            accept="application/json",
-            contentType="application/json"
-        )
-        
-        response_body = json.loads(response.get('body').read())
-        return response_body['output']['message']['content'][0]['text']
-    except Exception as e:
-        print(f"Bedrock error: {str(e)}")
-        return None
-
-def analyze_website(url, verbose=False):
+def analyze_website(url, verbose=False, provider_type="bedrock", ollama_model="llama3.2:3b"):
     """Comprehensively analyze website and generate summary"""
     if verbose:
         print(f"🔍 Analyzing website: {url}")
@@ -303,10 +360,14 @@ def analyze_website(url, verbose=False):
     
     # Combine all content
     combined_content = "\n\n" + "="*50 + "\n\n".join(all_content)
-    
-    # Create Bedrock client and generate summary
-    bedrock_client = create_bedrock_client()
-    
+
+    # Create AI provider and generate summary
+    if verbose:
+        provider_name = f"Ollama ({ollama_model})" if provider_type == "ollama" else "AWS Bedrock (Nova Pro)"
+        print(f"🤖 Using AI provider: {provider_name}")
+
+    ai_provider = create_ai_provider(provider_type=provider_type, ollama_model=ollama_model)
+
     prompt = f"""
     Analyze the following comprehensive website content and create two detailed summaries about this company:
 
@@ -339,9 +400,9 @@ def analyze_website(url, verbose=False):
 
     Keep both summaries professional and factual.
     """
-    
-    summary = call_bedrock(bedrock_client, prompt)
-    
+
+    summary = ai_provider.generate(prompt)
+
     return {
         'url': url,
         'total_urls_discovered': len(all_urls),
@@ -353,19 +414,42 @@ def analyze_website(url, verbose=False):
 
 def main():
     """Main CLI entry point"""
-    parser = argparse.ArgumentParser(description='Comprehensively analyze company websites and generate executive summaries')
+    parser = argparse.ArgumentParser(
+        description='Comprehensively analyze company websites and generate executive summaries',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+AI Provider Options:
+  --provider bedrock    Use AWS Bedrock Nova Pro (requires AWS credentials)
+  --provider ollama     Use local Ollama LLM (default: llama3.2:3b)
+  --ollama-model MODEL  Specify Ollama model (e.g., llama3.2:3b, llama3.2:1b)
+
+Examples:
+  # Use AWS Bedrock (default)
+  python analyzer.py https://stripe.com
+
+  # Use local Ollama with default model
+  python analyzer.py https://stripe.com --provider ollama
+
+  # Use local Ollama with specific model
+  python analyzer.py https://stripe.com --provider ollama --ollama-model llama3.2:1b
+        """
+    )
     parser.add_argument('url', help='Website URL to analyze')
     parser.add_argument('-o', '--output', help='Output file path (optional)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--json-only', action='store_true', help='Output only JSON, no formatted text')
-    
+    parser.add_argument('--provider', choices=['bedrock', 'ollama'], default='bedrock',
+                       help='AI provider to use (default: bedrock)')
+    parser.add_argument('--ollama-model', default='llama3.2:3b',
+                       help='Ollama model to use (default: llama3.2:3b)')
+
     args = parser.parse_args()
-    
+
     url = args.url
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
-    
-    result = analyze_website(url, args.verbose)
+
+    result = analyze_website(url, args.verbose, provider_type=args.provider, ollama_model=args.ollama_model)
     
     if result and result['analysis']:
         # Determine output file

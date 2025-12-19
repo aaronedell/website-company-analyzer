@@ -1,6 +1,10 @@
 # Website Company Analyzer
 
-A CLI tool that comprehensively analyzes company websites and generates detailed executive summaries using AWS Bedrock's Nova Pro model.
+A CLI tool that comprehensively analyzes company websites and generates detailed executive summaries using AI.
+
+**Supports two AI providers:**
+- **AWS Bedrock (Nova Pro)** - Cloud-based, high-quality analysis
+- **Ollama (Local LLM)** - Run entirely on your Mac, no cloud costs, privacy-focused
 
 📋 **[View Architecture Diagram](ARCHITECTURE.md)**
 
@@ -18,22 +22,54 @@ A CLI tool that comprehensively analyzes company websites and generates detailed
 ## Prerequisites
 
 - Python 3.7+
-- AWS Account with Bedrock access
-- AWS credentials configured
+- **Choose one (or both) AI providers:**
+  - AWS Account with Bedrock access + AWS credentials configured
+  - Ollama installed locally (recommended for Mac users)
 
-### AWS Setup
+### Option 1: AWS Bedrock Setup
 
-1. **Create AWS Account**: If you don't have one, sign up at [aws.amazon.com](https://aws.amazon.com)
+1. **Create AWS Account**: Sign up at [aws.amazon.com](https://aws.amazon.com)
 
-2. **Enable Bedrock Access**: 
+2. **Enable Bedrock Access**:
    - Go to AWS Bedrock console
    - Request access to Nova Pro model (us.amazon.nova-pro-v1:0)
-   - Wait for approval (usually instant for most accounts)
+   - Wait for approval (usually instant)
 
 3. **Get AWS Credentials**:
    - Go to [AWS IAM Console](https://console.aws.amazon.com/iam/home#/security_credentials)
    - Create new access key
    - Note down Access Key ID and Secret Access Key
+
+### Option 2: Ollama Setup (Recommended for Mac)
+
+Ollama lets you run powerful AI models locally on your Mac - no cloud costs, complete privacy!
+
+1. **Install Ollama**:
+   ```bash
+   brew install ollama
+   ```
+
+2. **Start Ollama service**:
+   ```bash
+   brew services start ollama
+   ```
+
+3. **Download a model** (recommended: Llama 3.2 3B):
+   ```bash
+   ollama pull llama3.2:3b
+   ```
+
+   **Other model options:**
+   - `llama3.2:1b` - Smallest/fastest (1GB)
+   - `llama3.2:3b` - Balanced quality/speed (2GB) - **Recommended**
+   - `qwen2.5:3b` - Alternative 3B model
+
+4. **Verify installation**:
+   ```bash
+   ollama list
+   ```
+
+That's it! Ollama is ready to use.
 
 ## Installation
 
@@ -57,6 +93,18 @@ A CLI tool that comprehensively analyzes company websites and generates detailed
 ## Usage
 
 ### Basic Usage
+
+**Using Ollama (local, free, no cloud costs):**
+```bash
+python analyzer.py https://example.com --provider ollama
+```
+
+**Using AWS Bedrock (cloud-based):**
+```bash
+python analyzer.py https://example.com --provider bedrock
+```
+
+**Default** (uses Bedrock if no --provider specified):
 ```bash
 python analyzer.py https://example.com
 ```
@@ -66,27 +114,39 @@ python analyzer.py https://example.com
 python analyzer.py <URL> [OPTIONS]
 
 Options:
-  -o, --output FILE     Specify output file path
-  -v, --verbose        Show detailed progress
-  --json-only          Output only JSON format
-  -h, --help           Show help message
+  -o, --output FILE          Specify output file path
+  -v, --verbose             Show detailed progress
+  --json-only               Output only JSON format
+  --provider {bedrock,ollama}  Choose AI provider (default: bedrock)
+  --ollama-model MODEL      Specify Ollama model (default: llama3.2:3b)
+  -h, --help                Show help message
 ```
 
 ### Examples
 
-**Analyze a website with verbose output:**
+**Analyze with local Ollama (recommended for Mac):**
 ```bash
-python analyzer.py https://stripe.com -v
+python analyzer.py https://stripe.com --provider ollama -v
+```
+
+**Use a faster Ollama model:**
+```bash
+python analyzer.py https://stripe.com --provider ollama --ollama-model llama3.2:1b
+```
+
+**Use AWS Bedrock with verbose output:**
+```bash
+python analyzer.py https://stripe.com --provider bedrock -v
 ```
 
 **Save to specific file:**
 ```bash
-python analyzer.py https://shopify.com -o shopify_analysis.json
+python analyzer.py https://shopify.com --provider ollama -o shopify_analysis.json
 ```
 
 **Get JSON output only:**
 ```bash
-python analyzer.py https://aws.amazon.com --json-only
+python analyzer.py https://aws.amazon.com --provider ollama --json-only
 ```
 
 ## Output Format
@@ -176,11 +236,31 @@ pip install -r requirements.txt
 - Some sites require JavaScript rendering (not supported)
 - Check if the URL is accessible in your browser
 
-### AWS Costs
+### Cost Comparison
 
-- Nova Pro model costs approximately $0.80 per 1M input tokens
-- Typical website analysis uses 2,000-5,000 tokens
+**Ollama (Local):**
+- Completely FREE
+- No per-request costs
+- Runs on your Mac
+- Complete privacy (data never leaves your machine)
+
+**AWS Bedrock:**
+- Nova Pro: ~$0.80 per 1M input tokens
+- Typical analysis: 2,000-5,000 tokens
 - Cost per analysis: ~$0.002-$0.004 (less than half a cent)
+- Cloud-based, requires internet connection
+
+### Performance Comparison
+
+**Ollama (Llama 3.2 3B) on M-series Mac:**
+- Speed: 15-30 seconds per analysis
+- Quality: Excellent for web summarization
+- Memory: ~2-3GB RAM
+
+**AWS Bedrock (Nova Pro):**
+- Speed: 5-15 seconds per analysis
+- Quality: Slightly more detailed
+- Requires: Active AWS account and internet
 
 ## Contributing
 

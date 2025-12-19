@@ -2,3 +2,7 @@ boto3>=1.34.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 beautifulsoup4>=4.13.0
+# Note: Ollama support requires Ollama to be installed separately
+# Install Ollama: brew install ollama
+# Start Ollama service: brew services start ollama
+# Pull model: ollama pull llama3.2:3b
