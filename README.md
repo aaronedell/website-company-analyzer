@@ -17,6 +17,8 @@ A CLI tool that comprehensively analyzes company websites and generates detailed
 - 🔧 **Technology Detection**: Automatically detects hosting providers, frameworks, and tech stack
 - 🤖 **AI-Powered Analysis**: Uses AWS Bedrock Nova Pro or local Ollama for intelligent content analysis
 - 📊 **Dual Summaries**: Generates both executive and detailed summaries
+- 📦 **Batch Processing**: Analyze multiple websites from CSV with progress tracking
+- ♻️ **Resume Support**: Ctrl+C safe - resume interrupted batch jobs from checkpoint
 - 💾 **JSON Export**: Saves structured analysis data for further processing
 - 🖥️ **CLI Interface**: Easy-to-use command-line interface with multiple output options
 
@@ -112,43 +114,94 @@ python analyzer.py https://example.com
 
 ### CLI Options
 ```bash
-python analyzer.py <URL> [OPTIONS]
+python analyzer.py [URL] [OPTIONS]
+
+Positional Arguments:
+  URL                       Website URL to analyze (not needed with --batch)
 
 Options:
-  -o, --output FILE          Specify output file path
+  -o, --output FILE          Specify output file path (single analysis only)
   -v, --verbose             Show detailed progress
-  --json-only               Output only JSON format
+  --json-only               Output only JSON format (single analysis only)
   --provider {bedrock,ollama}  Choose AI provider (default: bedrock)
   --ollama-model MODEL      Specify Ollama model (default: llama3.2:3b)
+  --batch FILE              Batch analyze URLs from CSV file
+  --batch-output DIR        Output directory for batch results (default: batch_analysis_results)
   -h, --help                Show help message
 ```
 
 ### Examples
 
-**Analyze with local Ollama (recommended for Mac):**
+**Single Website Analysis:**
+
 ```bash
+# Analyze with local Ollama (recommended)
 python analyzer.py https://stripe.com --provider ollama -v
-```
 
-**Use a faster Ollama model:**
-```bash
+# Use a faster Ollama model
 python analyzer.py https://stripe.com --provider ollama --ollama-model llama3.2:1b
-```
 
-**Use AWS Bedrock with verbose output:**
-```bash
+# Use AWS Bedrock
 python analyzer.py https://stripe.com --provider bedrock -v
-```
 
-**Save to specific file:**
-```bash
+# Save to specific file
 python analyzer.py https://shopify.com --provider ollama -o shopify_analysis.json
 ```
 
-**Get JSON output only:**
+**Batch Analysis from CSV:**
+
 ```bash
-python analyzer.py https://aws.amazon.com --provider ollama --json-only
+# Analyze multiple websites from CSV
+python analyzer.py --batch example_urls.csv --provider ollama
+
+# Batch analysis with custom output directory
+python analyzer.py --batch my_urls.csv --batch-output my_results --provider ollama
+
+# Resume interrupted batch job (automatically resumes from checkpoint)
+python analyzer.py --batch my_urls.csv --provider ollama
 ```
+
+**CSV File Format:**
+
+The CSV file should have a `url` column (or URLs in the first column):
+
+```csv
+url
+stripe.com
+https://vercel.com
+netlify.com
+www.shopify.com
+```
+
+See [example_urls.csv](example_urls.csv) for a sample file.
+
+### Batch Processing Features
+
+**Progress Tracking:**
+- Live progress bar shows current website being analyzed
+- Real-time percentage and ETA display
+- No upper limit on number of URLs
+
+**Checkpoint/Resume Support:**
+- Press `Ctrl+C` to safely interrupt batch processing
+- Progress is automatically saved after each website
+- Resume from where you left off by running the same command again
+- No need to re-analyze already completed websites
+
+**Output Structure:**
+```
+batch_analysis_results/
+├── analysis_stripe_com.json      # Individual results
+├── analysis_vercel_com.json
+├── analysis_netlify_com.json
+└── batch_summary.json            # Summary of all results
+```
+
+The `batch_summary.json` includes:
+- Total URLs processed
+- Number of successful analyses
+- List of failed URLs (if any)
+- All analysis results in one file
 
 ## Output Format
 

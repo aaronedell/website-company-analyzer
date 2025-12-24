@@ -18,6 +18,9 @@ from bs4 import BeautifulSoup
 import re
 from collections import defaultdict
 from Wappalyzer import Wappalyzer, WebPage
+import csv
+from tqdm import tqdm
+import signal
 
 # Load environment variables
 load_dotenv()
@@ -567,6 +570,159 @@ def analyze_website(url, verbose=False, provider_type="bedrock", ollama_model="l
         'analysis': summary
     }
 
+def normalize_url(url):
+    """Normalize URL by ensuring it has http:// or https:// prefix"""
+    url = url.strip()
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+    return url
+
+def read_urls_from_csv(csv_file):
+    """Read URLs from CSV file. Expects 'url' column or first column."""
+    urls = []
+    try:
+        with open(csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            # Check if 'url' column exists
+            if 'url' in [h.lower() for h in reader.fieldnames]:
+                for row in reader:
+                    url = row.get('url') or row.get('URL') or row.get('Url')
+                    if url:
+                        urls.append(normalize_url(url))
+            else:
+                # Use first column if no 'url' column
+                f.seek(0)
+                reader = csv.reader(f)
+                header = next(reader, None)  # Skip header
+                for row in reader:
+                    if row and row[0]:
+                        urls.append(normalize_url(row[0]))
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        sys.exit(1)
+
+    return urls
+
+def batch_analyze_websites(csv_file, output_dir=None, provider_type="bedrock", ollama_model="llama3.2:3b", verbose=False):
+    """Analyze multiple websites from CSV file with progress tracking and checkpoint support"""
+
+    # Read URLs from CSV
+    urls = read_urls_from_csv(csv_file)
+    if not urls:
+        print("❌ No URLs found in CSV file")
+        sys.exit(1)
+
+    print(f"📋 Found {len(urls)} URLs to analyze")
+
+    # Create output directory
+    if not output_dir:
+        output_dir = "batch_analysis_results"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Checkpoint file to track progress
+    checkpoint_file = os.path.join(output_dir, '.checkpoint.json')
+    completed_urls = set()
+
+    # Load checkpoint if exists
+    if os.path.exists(checkpoint_file):
+        try:
+            with open(checkpoint_file, 'r') as f:
+                checkpoint_data = json.load(f)
+                completed_urls = set(checkpoint_data.get('completed', []))
+            if completed_urls:
+                print(f"📂 Resuming from checkpoint: {len(completed_urls)} already completed")
+        except:
+            pass
+
+    # Filter out already completed URLs
+    remaining_urls = [url for url in urls if url not in completed_urls]
+
+    if not remaining_urls:
+        print("✅ All URLs already analyzed!")
+        return
+
+    print(f"🚀 Analyzing {len(remaining_urls)} websites...\n")
+
+    # Track results
+    all_results = []
+    failed_urls = []
+
+    # Progress bar
+    pbar = tqdm(remaining_urls, desc="Analyzing websites", unit="site")
+
+    # Handle Ctrl+C gracefully
+    def signal_handler(sig, frame):
+        print("\n\n⚠️  Interrupted! Saving checkpoint...")
+        save_checkpoint()
+        print(f"✅ Progress saved. {len(completed_urls)} URLs completed.")
+        print(f"📁 Results saved in: {output_dir}")
+        sys.exit(0)
+
+    def save_checkpoint():
+        with open(checkpoint_file, 'w') as f:
+            json.dump({'completed': list(completed_urls)}, f)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        for url in pbar:
+            pbar.set_description(f"Analyzing {urlparse(url).netloc}")
+
+            try:
+                # Analyze website
+                result = analyze_website(url, verbose=False, provider_type=provider_type, ollama_model=ollama_model)
+
+                if result and result.get('analysis'):
+                    # Save individual result
+                    domain = urlparse(url).netloc.replace('.', '_')
+                    output_file = os.path.join(output_dir, f"analysis_{domain}.json")
+
+                    with open(output_file, 'w') as f:
+                        json.dump(result, f, indent=2)
+
+                    all_results.append(result)
+                    completed_urls.add(url)
+                    save_checkpoint()
+                else:
+                    failed_urls.append(url)
+                    pbar.write(f"⚠️  Failed to analyze: {url}")
+
+            except Exception as e:
+                failed_urls.append(url)
+                pbar.write(f"❌ Error analyzing {url}: {str(e)}")
+                continue
+
+        # Create summary report
+        summary_file = os.path.join(output_dir, 'batch_summary.json')
+        summary = {
+            'total_urls': len(urls),
+            'completed': len(completed_urls),
+            'failed': len(failed_urls),
+            'failed_urls': failed_urls,
+            'results': all_results
+        }
+
+        with open(summary_file, 'w') as f:
+            json.dump(summary, f, indent=2)
+
+        # Clean up checkpoint file
+        if os.path.exists(checkpoint_file):
+            os.remove(checkpoint_file)
+
+        print("\n" + "="*80)
+        print("BATCH ANALYSIS COMPLETE")
+        print("="*80)
+        print(f"✅ Successfully analyzed: {len(completed_urls)}/{len(urls)}")
+        if failed_urls:
+            print(f"❌ Failed: {len(failed_urls)}")
+        print(f"📁 Results saved in: {output_dir}")
+        print(f"📊 Summary report: {summary_file}")
+
+    except Exception as e:
+        print(f"\n❌ Batch analysis error: {e}")
+        save_checkpoint()
+        sys.exit(1)
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -579,30 +735,45 @@ AI Provider Options:
   --ollama-model MODEL  Specify Ollama model (e.g., llama3.2:3b, llama3.2:1b)
 
 Examples:
-  # Use AWS Bedrock (default)
-  python analyzer.py https://stripe.com
-
-  # Use local Ollama with default model
+  # Analyze single website
   python analyzer.py https://stripe.com --provider ollama
 
-  # Use local Ollama with specific model
-  python analyzer.py https://stripe.com --provider ollama --ollama-model llama3.2:1b
+  # Batch analyze from CSV (with checkpoint/resume support)
+  python analyzer.py --batch urls.csv --provider ollama
+
+  # Batch analyze with custom output directory
+  python analyzer.py --batch urls.csv --batch-output my_results --provider ollama
         """
     )
-    parser.add_argument('url', help='Website URL to analyze')
-    parser.add_argument('-o', '--output', help='Output file path (optional)')
+    parser.add_argument('url', nargs='?', help='Website URL to analyze (not needed if using --batch)')
+    parser.add_argument('-o', '--output', help='Output file path (single analysis only)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
     parser.add_argument('--json-only', action='store_true', help='Output only JSON, no formatted text')
     parser.add_argument('--provider', choices=['bedrock', 'ollama'], default='bedrock',
                        help='AI provider to use (default: bedrock)')
     parser.add_argument('--ollama-model', default='llama3.2:3b',
                        help='Ollama model to use (default: llama3.2:3b)')
+    parser.add_argument('--batch', help='Batch analyze URLs from CSV file')
+    parser.add_argument('--batch-output', help='Output directory for batch analysis (default: batch_analysis_results)')
 
     args = parser.parse_args()
 
-    url = args.url
-    if not url.startswith(('http://', 'https://')):
-        url = 'https://' + url
+    # Batch mode
+    if args.batch:
+        batch_analyze_websites(
+            csv_file=args.batch,
+            output_dir=args.batch_output,
+            provider_type=args.provider,
+            ollama_model=args.ollama_model,
+            verbose=args.verbose
+        )
+        return
+
+    # Single URL mode
+    if not args.url:
+        parser.error('URL is required when not using --batch mode')
+
+    url = normalize_url(args.url)
 
     result = analyze_website(url, args.verbose, provider_type=args.provider, ollama_model=args.ollama_model)
     
