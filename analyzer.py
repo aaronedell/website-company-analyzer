@@ -17,9 +17,107 @@ import boto3
 from bs4 import BeautifulSoup
 import re
 from collections import defaultdict
+from Wappalyzer import Wappalyzer, WebPage
 
 # Load environment variables
 load_dotenv()
+
+# Technology name mappings for human-readable output
+TECH_MAPPINGS = {
+    # Cloud Hosting Providers
+    'Amazon EC2': 'AWS',
+    'Amazon S3': 'AWS S3',
+    'Amazon CloudFront': 'AWS CloudFront',
+    'AWS Certificate Manager': 'AWS',
+    'Amazon ALB': 'AWS',
+    'Amazon ELB': 'AWS',
+    'AWS Elastic Beanstalk': 'AWS Elastic Beanstalk',
+    'Amazon Web Services': 'AWS',
+    'Google Cloud': 'Google Cloud Platform (GCP)',
+    'Google Cloud CDN': 'GCP',
+    'Google App Engine': 'GCP App Engine',
+    'Firebase': 'Firebase (GCP)',
+    'Microsoft Azure': 'Microsoft Azure',
+    'Azure CDN': 'Azure CDN',
+    'DigitalOcean': 'DigitalOcean',
+    'Linode': 'Linode',
+    'Vultr': 'Vultr',
+    'Hetzner': 'Hetzner Cloud',
+    'Oracle Cloud': 'Oracle Cloud',
+
+    # Modern Hosting Platforms
+    'Vercel': 'Vercel',
+    'Netlify': 'Netlify',
+    'Cloudflare': 'Cloudflare',
+    'Cloudflare Pages': 'Cloudflare Pages',
+    'Cloudflare Workers': 'Cloudflare Workers',
+    'Railway': 'Railway',
+    'Render': 'Render',
+    'Fly.io': 'Fly.io',
+    'Heroku': 'Heroku',
+    'PlanetScale': 'PlanetScale',
+    'Supabase': 'Supabase',
+    'Neon': 'Neon',
+
+    # CDN Providers
+    'Cloudflare CDN': 'Cloudflare',
+    'Fastly': 'Fastly',
+    'Akamai': 'Akamai',
+    'BunnyCDN': 'BunnyCDN',
+    'KeyCDN': 'KeyCDN',
+
+    # Traditional Hosting
+    'GoDaddy': 'GoDaddy',
+    'Bluehost': 'Bluehost',
+    'HostGator': 'HostGator',
+    'SiteGround': 'SiteGround',
+    'DreamHost': 'DreamHost',
+    'Namecheap': 'Namecheap',
+
+    # Specialized Platforms
+    'GitHub Pages': 'GitHub Pages',
+    'GitLab Pages': 'GitLab Pages',
+    'WordPress': 'WordPress',
+    'Wix': 'Wix',
+    'Squarespace': 'Squarespace',
+    'Shopify': 'Shopify',
+    'Webflow': 'Webflow',
+
+    # Web Servers
+    'Nginx': 'Nginx',
+    'Apache': 'Apache',
+    'Microsoft IIS': 'Microsoft IIS',
+    'LiteSpeed': 'LiteSpeed',
+    'Caddy': 'Caddy',
+
+    # Frameworks
+    'Next.js': 'Next.js',
+    'React': 'React',
+    'Vue.js': 'Vue.js',
+    'Angular': 'Angular',
+    'Svelte': 'Svelte',
+    'Nuxt.js': 'Nuxt.js',
+    'Gatsby': 'Gatsby',
+    'Django': 'Django',
+    'Flask': 'Flask',
+    'Ruby on Rails': 'Ruby on Rails',
+    'Laravel': 'Laravel',
+    'Express': 'Express.js',
+    'FastAPI': 'FastAPI',
+}
+
+# Categories for organizing technologies
+TECH_CATEGORIES = {
+    'hosting': ['AWS', 'GCP', 'Azure', 'Vercel', 'Netlify', 'Cloudflare', 'Railway', 'Render',
+                'Fly.io', 'Heroku', 'DigitalOcean', 'Linode', 'Vultr', 'Hetzner', 'Oracle Cloud',
+                'GitHub Pages', 'GitLab Pages', 'WordPress', 'Wix', 'Squarespace', 'Shopify', 'Webflow',
+                'GoDaddy', 'Bluehost', 'HostGator', 'SiteGround', 'DreamHost', 'Namecheap'],
+    'cdn': ['Cloudflare', 'Fastly', 'Akamai', 'BunnyCDN', 'KeyCDN', 'AWS CloudFront', 'Azure CDN'],
+    'server': ['Nginx', 'Apache', 'Microsoft IIS', 'LiteSpeed', 'Caddy'],
+    'framework': ['Next.js', 'React', 'Vue.js', 'Angular', 'Svelte', 'Nuxt.js', 'Gatsby',
+                  'Django', 'Flask', 'Ruby on Rails', 'Laravel', 'Express.js', 'FastAPI'],
+    'database': ['PlanetScale', 'Supabase', 'Neon', 'Firebase'],
+}
 
 # AI Provider Classes
 class AIProvider:
@@ -112,6 +210,59 @@ def create_ai_provider(provider_type="bedrock", ollama_model="llama3.2:3b"):
         return OllamaProvider(model=ollama_model)
     else:
         return BedrockProvider()
+
+def detect_technologies(url, verbose=False):
+    """Detect technologies used on a website and categorize them"""
+    try:
+        if verbose:
+            print("🔍 Detecting technologies...")
+
+        # Create Wappalyzer instance
+        wappalyzer = Wappalyzer.latest()
+
+        # Fetch webpage
+        webpage = WebPage.new_from_url(url)
+
+        # Analyze technologies
+        detected = wappalyzer.analyze_with_versions_and_categories(webpage)
+
+        # Simplify and categorize
+        simplified_techs = {
+            'hosting': set(),
+            'cdn': set(),
+            'server': set(),
+            'framework': set(),
+            'database': set(),
+            'other': set()
+        }
+
+        for tech_name in detected.keys():
+            # Map to simplified name
+            simplified_name = TECH_MAPPINGS.get(tech_name, tech_name)
+
+            # Categorize
+            categorized = False
+            for category, tech_list in TECH_CATEGORIES.items():
+                if any(t in simplified_name or simplified_name in t for t in tech_list):
+                    simplified_techs[category].add(simplified_name)
+                    categorized = True
+                    break
+
+            if not categorized:
+                simplified_techs['other'].add(simplified_name)
+
+        # Convert sets to sorted lists and remove empty categories
+        result = {k: sorted(list(v)) for k, v in simplified_techs.items() if v}
+
+        if verbose and result:
+            print(f"   Found {sum(len(v) for v in result.values())} technologies")
+
+        return result
+
+    except Exception as e:
+        if verbose:
+            print(f"   Warning: Technology detection failed: {str(e)}")
+        return {}
 
 def get_page_content(url, max_chars=8000):
     """Get and parse page content with better error handling"""
@@ -301,7 +452,10 @@ def analyze_website(url, verbose=False, provider_type="bedrock", ollama_model="l
     """Comprehensively analyze website and generate summary"""
     if verbose:
         print(f"🔍 Analyzing website: {url}")
-    
+
+    # Detect technologies first
+    technologies = detect_technologies(url, verbose=verbose)
+
     # Get main page content and DOM
     main_content = get_page_content(url)
     if not main_content:
@@ -409,6 +563,7 @@ def analyze_website(url, verbose=False, provider_type="bedrock", ollama_model="l
         'priority_urls_analyzed': priority_urls,
         'metadata_files_found': list(metadata.keys()),
         'url_categories': {k: len(v) for k, v in categorized_urls.items() if v},
+        'technologies': technologies,
         'analysis': summary
     }
 
@@ -475,6 +630,15 @@ Examples:
             print(f"📄 Priority Pages Analyzed: {len(result['priority_urls_analyzed'])}")
             if result['metadata_files_found']:
                 print(f"📋 Metadata Files: {', '.join(result['metadata_files_found'])}")
+
+            # Display detected technologies
+            if result.get('technologies'):
+                print("\n🔧 DETECTED TECHNOLOGIES:")
+                for category, techs in result['technologies'].items():
+                    if techs:
+                        category_label = category.upper().replace('_', ' ')
+                        print(f"   {category_label}: {', '.join(techs)}")
+
             print("\n" + "-"*80)
             print(result['analysis'])
             print("\n" + "="*80)

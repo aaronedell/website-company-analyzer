@@ -14,7 +14,8 @@ A CLI tool that comprehensively analyzes company websites and generates detailed
 - 🗺️ **Sitemap Analysis**: Parses XML sitemaps to find all available pages
 - 📋 **Metadata Discovery**: Reads robots.txt, humans.txt, llms.txt, and other metadata files
 - 🎯 **Smart URL Categorization**: Intelligently categorizes pages (about, products, blog, etc.)
-- 🤖 **AI-Powered Analysis**: Uses AWS Bedrock Nova Pro for intelligent content analysis
+- 🔧 **Technology Detection**: Automatically detects hosting providers, frameworks, and tech stack
+- 🤖 **AI-Powered Analysis**: Uses AWS Bedrock Nova Pro or local Ollama for intelligent content analysis
 - 📊 **Dual Summaries**: Generates both executive and detailed summaries
 - 💾 **JSON Export**: Saves structured analysis data for further processing
 - 🖥️ **CLI Interface**: Easy-to-use command-line interface with multiple output options
@@ -159,6 +160,12 @@ The tool generates comprehensive analysis with enhanced metadata:
 📊 URLs Discovered: 45
 📄 Priority Pages Analyzed: 12
 📋 Metadata Files: robots.txt, sitemap.xml, humans.txt
+
+🔧 DETECTED TECHNOLOGIES:
+   HOSTING: Vercel
+   CDN: Cloudflare
+   FRAMEWORK: Next.js, React
+   SERVER: Nginx
 ```
 
 ### Executive Summary
@@ -188,6 +195,12 @@ The tool generates comprehensive analysis with enhanced metadata:
     "blog": 15,
     "products": 8,
     "about": 3
+  },
+  "technologies": {
+    "hosting": ["Vercel"],
+    "cdn": ["Cloudflare"],
+    "framework": ["Next.js", "React"],
+    "server": ["Nginx"]
   }
 }
 ```
